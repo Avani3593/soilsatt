@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SoilSat — Pune Soil Moisture Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --soil-dark:   #1a1208;
+  --soil-deep:   #2d1f0e;
+  --soil-mid:    #3d2b14;
+  --amber:       #e8a020;
+  --amber-light: #f5c842;
+  --green-ok:    #4caf72;
+  --yellow-warn: #f0c040;
+  --red-alert:   #e05040;
+  --text-primary:#f0e8d8;
+  --text-muted:  #9a8878;
+  --border:      rgba(232,160,32,0.15);
+  --card-bg:     rgba(45,31,14,0.7);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--soil-dark);
+  color: var(--text-primary);
+  font-family: 'Sora', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* animated soil texture background */
+body::before {
+  content:'';
+  position:fixed; inset:0; z-index:0;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 80%, rgba(61,43,20,0.6) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 20%, rgba(45,31,14,0.8) 0%, transparent 50%),
+    repeating-linear-gradient(
+      45deg,
+      transparent 0px, transparent 2px,
+      rgba(232,160,32,0.02) 2px, rgba(232,160,32,0.02) 4px
+    );
+  pointer-events:none;
+}
+
+.wrap { position:relative; z-index:1; max-width:1200px; margin:0 auto; padding:24px 20px; }
+
+/* ── HEADER ── */
+header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding-bottom:24px;
+  border-bottom:1px solid var(--border);
+  margin-bottom:32px;
+}
+.logo { display:flex; align-items:center; gap:12px; }
+.logo-icon {
+  width:40px; height:40px; border-radius:10px;
+  background: linear-gradient(135deg, var(--amber), #c06010);
+  display:flex; align-items:center; justify-content:center;
+  font-size:20px;
+}
+.logo-text h1 { font-size:1.4rem; font-weight:700; letter-spacing:-0.5px; }
+.logo-text p { font-size:0.75rem; color:var(--text-muted); font-family:'DM Mono',monospace; margin-top:2px; }
+
+.header-right { display:flex; align-items:center; gap:16px; }
+.last-update {
+  font-family:'DM Mono',monospace; font-size:0.72rem;
+  color:var(--text-muted); text-align:right;
+}
+.status-dot {
+  width:8px; height:8px; border-radius:50%;
+  background:var(--green-ok);
+  box-shadow:0 0 8px var(--green-ok);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%,100%{ opacity:1; transform:scale(1); }
+  50%{ opacity:0.6; transform:scale(1.3); }
+}
+
+/* ── LOCATION BAR ── */
+.location-bar {
+  display:flex; align-items:center; gap:12px;
+  background:var(--card-bg); border:1px solid var(--border);
+  border-radius:12px; padding:14px 20px; margin-bottom:24px;
+  backdrop-filter:blur(8px);
+}
+.location-bar select {
+  background:transparent; border:none; color:var(--text-primary);
+  font-family:'Sora',sans-serif; font-size:0.95rem; font-weight:600;
+  outline:none; cursor:pointer; flex:1;
+}
+.location-bar select option { background:var(--soil-deep); color:var(--text-primary); }
+.loc-label { font-size:0.72rem; color:var(--text-muted); font-family:'DM Mono',monospace; white-space:nowrap; }
+.coords { font-family:'DM Mono',monospace; font-size:0.72rem; color:var(--amber); margin-left:auto; }
+
+/* ── MAIN GRID ── */
+.main-grid {
+  display:grid;
+  grid-template-columns: 300px 1fr;
+  grid-template-rows: auto auto;
+  gap:20px;
+  margin-bottom:20px;
+}
+
+/* ── SM GAUGE CARD ── */
+.gauge-card {
+  grid-row: 1 / 3;
+  background:var(--card-bg); border:1px solid var(--border);
+  border-radius:16px; padding:28px 24px;
+  backdrop-filter:blur(8px);
+  display:flex; flex-direction:column; align-items:center;
+}
+.gauge-title { font-size:0.72rem; color:var(--text-muted); font-family:'DM Mono',monospace; letter-spacing:1px; text-transform:uppercase; margin-bottom:20px; align-self:flex-start; }
+
+.gauge-wrap {
+  position:relative; width:200px; height:200px; margin-bottom:24px;
+}
+.gauge-wrap canvas { position:absolute; inset:0; }
+.gauge-center {
+  position:absolute; inset:0;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+}
+.gauge-value { font-size:2.8rem; font-weight:700; line-height:1; color:var(--amber-light); }
+.gauge-unit  { font-size:0.72rem; color:var(--text-muted); font-family:'DM Mono',monospace; margin-top:4px; }
+
+.status-badge {
+  display:inline-flex; align-items:center; gap:8px;
+  padding:8px 18px; border-radius:30px; font-size:0.85rem; font-weight:600;
+  margin-bottom:28px;
+  transition: all 0.5s ease;
+}
+.status-badge.ok     { background:rgba(76,175,114,0.15); color:var(--green-ok); border:1px solid rgba(76,175,114,0.3); }
+.status-badge.warn   { background:rgba(240,192,64,0.15);  color:var(--yellow-warn); border:1px solid rgba(240,192,64,0.3); }
+.status-badge.alert  { background:rgba(224,80,64,0.15);   color:var(--red-alert);   border:1px solid rgba(224,80,64,0.3); }
+
+.depth-breakdown { width:100%; }
+.depth-row {
+  display:flex; align-items:center; gap:10px; margin-bottom:12px;
+}
+.depth-label { font-family:'DM Mono',monospace; font-size:0.72rem; color:var(--text-muted); width:44px; flex-shrink:0; }
+.depth-bar-wrap { flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden; }
+.depth-bar { height:100%; border-radius:3px; transition:width 1.2s cubic-bezier(0.4,0,0.2,1); }
+.depth-val { font-family:'DM Mono',monospace; font-size:0.72rem; color:var(--text-primary); width:38px; text-align:right; flex-shrink:0; }
+
+.reco-box {
+  width:100%; margin-top:24px; padding:16px;
+  background:rgba(232,160,32,0.08); border:1px solid rgba(232,160,32,0.2);
+  border-radius:10px;
+}
+.reco-label { font-size:0.68rem; color:var(--amber); font-family:'DM Mono',monospace; letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; }
+.reco-text  { font-size:0.88rem; line-height:1.5; }
+.reco-marathi { font-size:0.82rem; color:var(--text-muted); margin-top:4px; }
+
+/* ── FORECAST CARD ── */
+.forecast-card {
+  background:var(--card-bg); border:1px solid var(--border);
+  border-radius:16px; padding:28px;
+  backdrop-filter:blur(8px);
+}
+.card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+.card-title  { font-size:0.72rem; color:var(--text-muted); font-family:'DM Mono',monospace; letter-spacing:1px; text-transform:uppercase; }
+.chart-tabs  { display:flex; gap:4px; }
+.chart-tab   { padding:5px 12px; border-radius:6px; font-size:0.75rem; border:none; cursor:pointer; font-family:'Sora',sans-serif; transition:all 0.2s; background:transparent; color:var(--text-muted); }
+.chart-tab.active { background:var(--amber); color:var(--soil-dark); font-weight:600; }
+.chart-wrap  { height:200px; position:relative; }
+
+/* ── STATS ROW ── */
+.stats-card {
+  background:var(--card-bg); border:1px solid var(--border);
+  border-radius:16px; padding:24px 28px;
+  backdrop-filter:blur(8px);
+  display:flex; gap:0;
+}
+.stat-item {
+  flex:1; text-align:center;
+  padding:0 20px;
+  border-right:1px solid var(--border);
+}
+.stat-item:last-child { border-right:none; }
+.stat-val   { font-size:1.8rem; font-weight:700; color:var(--amber-light); line-height:1; margin-bottom:4px; }
+.stat-label { font-size:0.72rem; color:var(--text-muted); font-family:'DM Mono',monospace; }
+.stat-delta { font-size:0.75rem; margin-top:4px; }
+.stat-delta.up   { color:var(--green-ok); }
+.stat-delta.down { color:var(--red-alert); }
+
+/* ── BOTTOM GRID ── */
+.bottom-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+
+/* ── FEATURE IMPORTANCE ── */
+.importance-card {
+  background:var(--card-bg); border:1px solid var(--border);
+  border-radius:16px; padding:24px;
+  backdrop-filter:blur(8px);
+}
+.fi-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.fi-name { font-size:0.78rem; color:var(--text-muted); width:120px; flex-shrink:0; font-family:'DM Mono',monospace; }
+.fi-bar-wrap { flex:1; height:8px; background:rgba(255,255,255,0.06); border-radius:4px; overflow:hidden; }
+.fi-bar { height:100%; border-radius:4px; transition:width 1.5s cubic-bezier(0.4,0,0.2,1); }
+.fi-pct { font-family:'DM Mono',monospace; font-size:0.72rem; color:var(--amber); width:36px; text-align:right; }
+
+/* ── MODEL INFO ── */
+.model-card {
+  background:var(--card-bg); border:1px solid var(--border);
+  border-radius:16px; padding:24px;
+  backdrop-filter:blur(8px);
+}
+.metric-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; }
+.metric-box {
+  background:rgba(255,255,255,0.04); border-radius:10px;
+  padding:14px 16px;
+  border:1px solid rgba(255,255,255,0.06);
+}
+.metric-num   { font-size:1.4rem; font-weight:700; color:var(--amber-light); font-family:'DM Mono',monospace; }
+.metric-label { font-size:0.68rem; color:var(--text-muted); font-family:'DM Mono',monospace; margin-top:2px; }
+.metric-bench { font-size:0.68rem; color:var(--green-ok); margin-top:4px; }
+
+/* ── FOOTER ── */
+footer {
+  margin-top:28px; padding-top:20px;
+  border-top:1px solid var(--border);
+  display:flex; justify-content:space-between; align-items:center;
+}
+footer p { font-size:0.72rem; color:var(--text-muted); font-family:'DM Mono',monospace; }
+
+/* ── RESPONSIVE ── */
+@media(max-width:900px) {
+  .main-grid { grid-template-columns:1fr; grid-template-rows:auto; }
+  .gauge-card { grid-row:auto; }
+  .stats-card { flex-wrap:wrap; }
+  .stat-item  { min-width:50%; border-right:none; padding:12px; }
+  .bottom-grid { grid-template-columns:1fr; }
+}
+
+/* ── ANIMATIONS ── */
+.card-in {
+  animation: cardIn 0.6s cubic-bezier(0.4,0,0.2,1) both;
+}
+@keyframes cardIn {
+  from { opacity:0; transform:translateY(16px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+.gauge-card  { animation-delay:0.1s; }
+.forecast-card{ animation-delay:0.2s; }
+.stats-card  { animation-delay:0.3s; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🌱</div>
+      <div class="logo-text">
+        <h1>SoilSat</h1>
+        <p>PUNE DISTRICT SOIL MOISTURE MONITOR</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="last-update">
+        <div>Last satellite pass</div>
+        <div id="lastUpdate" style="color:var(--amber)">—</div>
+      </div>
+      <div class="status-dot"></div>
+    </div>
+  </header>
+
+  <!-- LOCATION BAR -->
+  <div class="location-bar card-in">
+    <span class="loc-label">TALUKA</span>
+    <select id="talukaSelect" onchange="switchTaluka(this.value)">
+      <option value="baramati">Baramati</option>
+      <option value="indapur">Indapur</option>
+      <option value="haveli">Haveli</option>
+      <option value="junnar">Junnar</option>
+      <option value="shirur">Shirur</option>
+    </select>
+    <span class="loc-label">SOIL</span>
+    <span id="soilType" style="font-size:0.85rem; font-weight:600; color:var(--amber)">Vertisol (Black Cotton)</span>
+    <span class="coords" id="coordsDisplay">18.15°N  74.58°E</span>
+  </div>
+
+  <!-- MAIN GRID -->
+  <div class="main-grid">
+
+    <!-- GAUGE CARD -->
+    <div class="gauge-card card-in">
+      <div class="gauge-title">Root Zone Moisture (0–100 cm)</div>
+      <div class="gauge-wrap">
+        <canvas id="gaugeChart"></canvas>
+        <div class="gauge-center">
+          <div class="gauge-value" id="gaugeVal">0.31</div>
+          <div class="gauge-unit">m³/m³</div>
+        </div>
+      </div>
+
+      <div class="status-badge ok" id="statusBadge">
+        <span id="statusDot">●</span>
+        <span id="statusText">Sufficient</span>
+      </div>
+
+      <div class="depth-breakdown">
+        <div style="font-size:0.68rem; color:var(--text-muted); font-family:'DM Mono',monospace; letter-spacing:1px; text-transform:uppercase; margin-bottom:10px;">Depth Profile</div>
+        <div class="depth-row">
+          <span class="depth-label">10 cm</span>
+          <div class="depth-bar-wrap"><div class="depth-bar" id="bar10" style="width:0%; background:var(--amber-light);"></div></div>
+          <span class="depth-val" id="val10">—</span>
+        </div>
+        <div class="depth-row">
+          <span class="depth-label">30 cm</span>
+          <div class="depth-bar-wrap"><div class="depth-bar" id="bar30" style="width:0%; background:var(--amber);"></div></div>
+          <span class="depth-val" id="val30">—</span>
+        </div>
+        <div class="depth-row">
+          <span class="depth-label">60 cm</span>
+          <div class="depth-bar-wrap"><div class="depth-bar" id="bar60" style="width:0%; background:#c07020;"></div></div>
+          <span class="depth-val" id="val60">—</span>
+        </div>
+        <div class="depth-row">
+          <span class="depth-label">100 cm</span>
+          <div class="depth-bar-wrap"><div class="depth-bar" id="bar100" style="width:0%; background:#8a5010;"></div></div>
+          <span class="depth-val" id="val100">—</span>
+        </div>
+      </div>
+
+      <div class="reco-box" id="recoBox">
+        <div class="reco-label">Irrigation Advisory</div>
+        <div class="reco-text" id="recoText">Loading recommendation...</div>
+        <div class="reco-marathi" id="recoMarathi"></div>
+      </div>
+    </div>
+
+    <!-- FORECAST CARD -->
+    <div class="forecast-card card-in">
+      <div class="card-header">
+        <span class="card-title">7-Day Root Zone Forecast</span>
+        <div class="chart-tabs">
+          <button class="chart-tab active" onclick="switchChart('rootzone',this)">Root Zone</button>
+          <button class="chart-tab" onclick="switchChart('surface',this)">Surface</button>
+          <button class="chart-tab" onclick="switchChart('precip',this)">Rainfall</button>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="forecastChart"></canvas>
+      </div>
+    </div>
+
+    <!-- STATS ROW -->
+    <div class="stats-card card-in" style="grid-column:2;">
+      <div class="stat-item">
+        <div class="stat-val" id="statToday">—</div>
+        <div class="stat-label">TODAY m³/m³</div>
+        <div class="stat-delta" id="statDelta">—</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-val" id="statMin">—</div>
+        <div class="stat-label">7-DAY MIN</div>
+        <div class="stat-delta" style="color:var(--red-alert)" id="stressLabel">—</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-val" id="statMax">—</div>
+        <div class="stat-label">7-DAY MAX</div>
+        <div class="stat-delta up" id="satLabel">—</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-val" id="statDays">—</div>
+        <div class="stat-label">DAYS TO STRESS</div>
+        <div class="stat-delta" id="cropLabel">—</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM GRID -->
+  <div class="bottom-grid">
+
+    <!-- FEATURE IMPORTANCE -->
+    <div class="importance-card card-in">
+      <div class="card-header" style="margin-bottom:16px;">
+        <span class="card-title">Model Feature Importance</span>
+        <span style="font-size:0.72rem; color:var(--text-muted); font-family:'DM Mono',monospace;">XGBoost · Phase 1</span>
+      </div>
+      <div id="fiRows"></div>
+      <div style="margin-top:14px; padding:10px 12px; background:rgba(224,80,64,0.08); border:1px solid rgba(224,80,64,0.2); border-radius:8px;">
+        <div style="font-size:0.68rem; color:var(--red-alert); font-family:'DM Mono',monospace; letter-spacing:1px; text-transform:uppercase; margin-bottom:4px;">Research Finding</div>
+        <div style="font-size:0.78rem; color:var(--text-muted); line-height:1.5;">SAR signal contributes &lt;1% — label resolution mismatch hypothesis. Phase 2 sensor deployment targets &gt;15% SAR importance.</div>
+      </div>
+    </div>
+
+    <!-- MODEL PERFORMANCE -->
+    <div class="model-card card-in">
+      <div class="card-header" style="margin-bottom:4px;">
+        <span class="card-title">Model Performance</span>
+        <span style="font-size:0.72rem; color:var(--green-ok); font-family:'DM Mono',monospace;">● 2.9× SMAP</span>
+      </div>
+      <div style="font-size:0.78rem; color:var(--text-muted); margin-bottom:4px;">XGBoost · 22,192 samples · 5-fold CV · Pune Vertisol</div>
+      <div class="metric-grid">
+        <div class="metric-box">
+          <div class="metric-num">0.0139</div>
+          <div class="metric-label">ubRMSE (m³/m³)</div>
+          <div class="metric-bench">▼ SMAP: 0.040</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-num">0.960</div>
+          <div class="metric-label">R² Score</div>
+          <div class="metric-bench">↑ vs RF: 0.957</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-num">17</div>
+          <div class="metric-label">Features</div>
+          <div class="metric-bench">SAR + optical + climate</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-num">9 yrs</div>
+          <div class="metric-label">Training data</div>
+          <div class="metric-bench">2016 → 2024</div>
+        </div>
+      </div>
+      <div style="margin-top:14px; padding:10px 12px; background:rgba(76,175,114,0.08); border:1px solid rgba(76,175,114,0.2); border-radius:8px;">
+        <div style="font-size:0.68rem; color:var(--green-ok); font-family:'DM Mono',monospace; letter-spacing:1px; text-transform:uppercase; margin-bottom:4px;">Phase 2 Target</div>
+        <div style="font-size:0.78rem; color:var(--text-muted); line-height:1.5;">1 IoT sensor at 30 cm depth · MMCOE campus · sensor-calibrated SAR retraining · target ubRMSE &lt; 0.010</div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    <p>SoilSat v1.0 · MMCOE Pune · Sentinel-1 SAR + XGBoost + Richards Equation</p>
+    <p id="dataSource">Data: GEE · SMAP · ERA5-Land · SRTM</p>
+  </footer>
+
+</div>
+
+<script>
+// ── MOCK DATA (replace with Firebase fetch in production) ──────────────────
+
+const TALUKAS = {
+  baramati: {
+    name:'Baramati', coords:'18.15°N  74.58°E',
+    soil:'Vertisol (Black Cotton)',
+    crop:'Cotton', cropMarathi:'कापूस',
+    sm: { d10:0.34, d30:0.31, d60:0.28, d100:0.25 },
+    forecast: [0.31,0.29,0.27,0.24,0.22,0.21,0.20],
+    surface:  [0.34,0.30,0.26,0.22,0.19,0.17,0.16],
+    precip:   [0,0,2,0,0,0,0],
+    stressThreshold: 0.18,
+    fieldCapacity:   0.38,
+  },
+  indapur: {
+    name:'Indapur', coords:'17.97°N  75.01°E',
+    soil:'Vertisol (Shallow)',
+    crop:'Jowar', cropMarathi:'ज्वारी',
+    sm: { d10:0.22, d30:0.20, d60:0.18, d100:0.17 },
+    forecast: [0.20,0.19,0.18,0.17,0.16,0.15,0.14],
+    surface:  [0.22,0.20,0.18,0.16,0.14,0.13,0.12],
+    precip:   [0,0,0,0,0,0,0],
+    stressThreshold: 0.16,
+    fieldCapacity:   0.35,
+  },
+  haveli: {
+    name:'Haveli', coords:'18.52°N  73.92°E',
+    soil:'Vertisol (Mixed)',
+    crop:'Wheat', cropMarathi:'गहू',
+    sm: { d10:0.40, d30:0.38, d60:0.35, d100:0.32 },
+    forecast: [0.38,0.37,0.36,0.35,0.34,0.33,0.32],
+    surface:  [0.40,0.38,0.36,0.34,0.32,0.30,0.29],
+    precip:   [8,0,0,4,0,0,0],
+    stressThreshold: 0.20,
+    fieldCapacity:   0.42,
+  },
+  junnar: {
+    name:'Junnar', coords:'19.20°N  73.88°E',
+    soil:'Red Laterite',
+    crop:'Onion', cropMarathi:'कांदा',
+    sm: { d10:0.18, d30:0.16, d60:0.14, d100:0.13 },
+    forecast: [0.16,0.15,0.14,0.14,0.13,0.13,0.12],
+    surface:  [0.18,0.16,0.14,0.13,0.12,0.11,0.10],
+    precip:   [0,0,0,0,0,0,3],
+    stressThreshold: 0.12,
+    fieldCapacity:   0.28,
+  },
+  shirur: {
+    name:'Shirur', coords:'18.83°N  74.38°E',
+    soil:'Vertisol (Rain Shadow)',
+    crop:'Sugarcane', cropMarathi:'ऊस',
+    sm: { d10:0.25, d30:0.24, d60:0.23, d100:0.22 },
+    forecast: [0.24,0.23,0.22,0.21,0.20,0.19,0.18],
+    surface:  [0.25,0.23,0.21,0.19,0.18,0.17,0.16],
+    precip:   [0,0,0,0,0,0,0],
+    stressThreshold: 0.19,
+    fieldCapacity:   0.40,
+  }
+};
+
+const FEATURES = [
+  { name:'precip_30d',  pct:42.9, color:'#e8a020' },
+  { name:'day_of_year', pct:22.8, color:'#d08818' },
+  { name:'pass_flag',   pct:13.7, color:'#b87010' },
+  { name:'precip_7d',   pct:8.0,  color:'#a06010' },
+  { name:'LST_C',       pct:2.5,  color:'#885020' },
+  { name:'VV_dB',       pct:0.6,  color:'rgba(224,80,64,0.8)' },
+  { name:'VH_dB',       pct:0.6,  color:'rgba(224,80,64,0.6)' },
+];
+
+// ── CHARTS ────────────────────────────────────────────────────────────────────
+
+let forecastChart, gaugeChart;
+let currentMode = 'rootzone';
+
+function getDays() {
+  const days = [];
+  const d = new Date();
+  for(let i=0;i<7;i++){
+    const dd = new Date(d);
+    dd.setDate(d.getDate()+i);
+    days.push(dd.toLocaleDateString('en-IN',{weekday:'short',day:'numeric'}));
+  }
+  return days;
+}
+
+function initGauge(val, max=0.5) {
+  const ctx = document.getElementById('gaugeChart').getContext('2d');
+  const pct = val/max;
+  const color = val < 0.18 ? '#e05040' : val < 0.25 ? '#f0c040' : '#4caf72';
+
+  if(gaugeChart) gaugeChart.destroy();
+  gaugeChart = new Chart(ctx, {
+    type:'doughnut',
+    data:{
+      datasets:[{
+        data:[pct, 1-pct],
+        backgroundColor:[color,'rgba(255,255,255,0.05)'],
+        borderWidth:0,
+        circumference:270,
+        rotation:225,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      cutout:'78%',
+      plugins:{ legend:{display:false}, tooltip:{enabled:false} },
+      animation:{ duration:1200, easing:'easeInOutQuart' }
+    }
+  });
+}
+
+function initForecast(taluka) {
+  const ctx = document.getElementById('forecastChart').getContext('2d');
+  const data = currentMode === 'rootzone' ? taluka.forecast :
+               currentMode === 'surface'  ? taluka.surface  :
+               taluka.precip;
+  const label = currentMode === 'rootzone' ? 'Root zone SM (m³/m³)' :
+                currentMode === 'surface'  ? 'Surface SM (m³/m³)' :
+                'Rainfall (mm)';
+  const color = currentMode === 'precip' ? '#4caf72' : '#e8a020';
+  const fillColor = currentMode === 'precip'
+    ? 'rgba(76,175,114,0.15)'
+    : 'rgba(232,160,32,0.12)';
+
+  if(forecastChart) forecastChart.destroy();
+
+  const chartData = {
+    labels: getDays(),
+    datasets:[{
+      label,
+      data,
+      borderColor: color,
+      backgroundColor: fillColor,
+      borderWidth:2,
+      pointBackgroundColor: color,
+      pointRadius:4,
+      pointHoverRadius:6,
+      tension:0.4,
+      fill:true,
+    }]
+  };
+
+  // Add stress threshold line for SM charts
+  if(currentMode !== 'precip') {
+    chartData.datasets.push({
+      label:'Stress threshold',
+      data: new Array(7).fill(taluka.stressThreshold),
+      borderColor:'rgba(224,80,64,0.5)',
+      borderWidth:1.5,
+      borderDash:[4,4],
+      pointRadius:0,
+      fill:false,
+    });
+  }
+
+  forecastChart = new Chart(ctx, {
+    type: currentMode === 'precip' ? 'bar' : 'line',
+    data: chartData,
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ display:false },
+        tooltip:{
+          backgroundColor:'rgba(29,15,4,0.95)',
+          titleColor:'#f0e8d8',
+          bodyColor:'#9a8878',
+          borderColor:'rgba(232,160,32,0.3)',
+          borderWidth:1,
+          padding:10,
+          callbacks:{
+            label: ctx => ` ${ctx.parsed.y.toFixed(3)} ${currentMode==='precip'?'mm':'m³/m³'}`
+          }
+        }
+      },
+      scales:{
+        x:{
+          grid:{ color:'rgba(255,255,255,0.04)' },
+          ticks:{ color:'#9a8878', font:{family:'DM Mono',size:11} }
+        },
+        y:{
+          grid:{ color:'rgba(255,255,255,0.04)' },
+          ticks:{ color:'#9a8878', font:{family:'DM Mono',size:11}, callback: v => v.toFixed(currentMode==='precip'?0:2) },
+          min: currentMode==='precip' ? 0 : undefined,
+        }
+      }
+    }
+  });
+}
+
+function switchChart(mode, btn) {
+  currentMode = mode;
+  document.querySelectorAll('.chart-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const t = TALUKAS[document.getElementById('talukaSelect').value];
+  initForecast(t);
+}
+
+// ── LOAD TALUKA DATA ──────────────────────────────────────────────────────────
+
+function loadTaluka(key) {
+  const t = TALUKAS[key];
+  document.getElementById('coordsDisplay').textContent = t.coords;
+  document.getElementById('soilType').textContent = t.soil;
+
+  // Update last update timestamp
+  const now = new Date();
+  document.getElementById('lastUpdate').textContent =
+    now.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+
+  // Gauge
+  const avg = (t.sm.d10+t.sm.d30+t.sm.d60+t.sm.d100)/4;
+  document.getElementById('gaugeVal').textContent = avg.toFixed(2);
+  initGauge(avg);
+
+  // Status
+  const badge = document.getElementById('statusBadge');
+  const statusText = document.getElementById('statusText');
+  badge.className = 'status-badge';
+  if(avg < t.stressThreshold) {
+    badge.classList.add('alert');
+    statusText.textContent = 'Irrigate Now';
+  } else if(avg < t.stressThreshold + 0.05) {
+    badge.classList.add('warn');
+    statusText.textContent = 'Monitor Closely';
+  } else {
+    badge.classList.add('ok');
+    statusText.textContent = 'Sufficient';
+  }
+
+  // Depth bars (relative to field capacity)
+  const fc = t.fieldCapacity;
+  function setBar(id, valId, val) {
+    setTimeout(()=>{
+      document.getElementById(id).style.width = Math.min(100, (val/fc)*100)+'%';
+      document.getElementById(valId).textContent = val.toFixed(3);
+    }, 200);
+  }
+  setBar('bar10','val10',t.sm.d10);
+  setBar('bar30','val30',t.sm.d30);
+  setBar('bar60','val60',t.sm.d60);
+  setBar('bar100','val100',t.sm.d100);
+
+  // Recommendation
+  const recoText = document.getElementById('recoText');
+  const recoMarathi = document.getElementById('recoMarathi');
+  const daysToStress = t.forecast.findIndex(v => v < t.stressThreshold);
+
+  if(avg < t.stressThreshold) {
+    recoText.textContent = `Irrigate today — apply 450 L/acre for ${t.crop}.`;
+    recoMarathi.textContent = `आज ${t.cropMarathi}ला ४५० लिटर/एकर द्या.`;
+  } else if(daysToStress >= 0 && daysToStress <= 3) {
+    const day = getDays()[daysToStress];
+    recoText.textContent = `Irrigate by ${day} — SM will reach stress level.`;
+    recoMarathi.textContent = `${day} पर्यंत सिंचन करा.`;
+  } else {
+    recoText.textContent = `No irrigation needed for 7 days. Monitor weekly.`;
+    recoMarathi.textContent = `७ दिवस सिंचनाची गरज नाही.`;
+  }
+
+  // Stats
+  const min7 = Math.min(...t.forecast).toFixed(3);
+  const max7 = Math.max(...t.forecast).toFixed(3);
+  const delta = (t.forecast[1]-t.forecast[0]);
+  document.getElementById('statToday').textContent = t.forecast[0].toFixed(3);
+  document.getElementById('statDelta').textContent =
+    (delta>0?'▲':'▼')+' '+Math.abs(delta).toFixed(3)+' tomorrow';
+  document.getElementById('statDelta').className = 'stat-delta '+(delta>0?'up':'down');
+  document.getElementById('statMin').textContent = min7;
+  document.getElementById('statMax').textContent = max7;
+  document.getElementById('stressLabel').textContent = '< '+t.stressThreshold+' threshold';
+  document.getElementById('satLabel').textContent = '< '+t.fieldCapacity+' field cap.';
+
+  const ds = daysToStress < 0 ? '7+' : String(daysToStress);
+  document.getElementById('statDays').textContent = ds;
+  document.getElementById('cropLabel').textContent = t.crop+' · '+t.cropMarathi;
+
+  // Forecast chart
+  initForecast(t);
+}
+
+function switchTaluka(key) { loadTaluka(key); }
+
+// ── FEATURE IMPORTANCE BARS ───────────────────────────────────────────────────
+function renderFI() {
+  const wrap = document.getElementById('fiRows');
+  wrap.innerHTML = '';
+  FEATURES.forEach((f,i) => {
+    const row = document.createElement('div');
+    row.className = 'fi-row';
+    row.innerHTML = `
+      <span class="fi-name">${f.name}</span>
+      <div class="fi-bar-wrap"><div class="fi-bar" id="fib${i}" style="width:0%; background:${f.color};"></div></div>
+      <span class="fi-pct">${f.pct}%</span>
+    `;
+    wrap.appendChild(row);
+    setTimeout(()=>{ document.getElementById('fib'+i).style.width=f.pct+'%'; }, 400+i*80);
+  });
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  loadTaluka('baramati');
+  renderFI();
+});
+</script>
+</body>
+</html>
