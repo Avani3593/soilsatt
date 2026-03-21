@@ -37,84 +37,81 @@
 
   /* HEADER */
   header {
-    background: linear-gradient(135deg, #0B1221 0%, #0D1F3C 60%, #0A2040 100%);
-    color: var(--straw);
+    background: linear-gradient(135deg, #1A5276 0%, #1F618D 60%, #2471A3 100%);
+    color: #EBF5FB;
     padding: 16px 32px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 1px solid rgba(33,150,243,0.25);
+    border-bottom: 1px solid rgba(255,255,255,0.15);
     position: relative; overflow: hidden;
   }
   header::before {
     content: ''; position: absolute;
     top: -60px; right: -60px;
     width: 220px; height: 220px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(33,150,243,0.15) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%);
     pointer-events: none;
   }
   header::after {
     content: ''; position: absolute;
     bottom: -40px; left: 200px;
     width: 140px; height: 140px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(66,165,245,0.08) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%);
     pointer-events: none;
   }
   .logo { display: flex; align-items: center; gap: 14px; position: relative; }
   .logo-icon {
     width: 42px; height: 42px;
-    background: linear-gradient(135deg, #1565C0, #0D47A1);
+    background: rgba(255,255,255,0.18);
     border-radius: 10px; display: flex; align-items: center;
     justify-content: center; font-size: 22px;
-    border: 1px solid rgba(100,181,246,0.3);
-    box-shadow: 0 0 16px rgba(33,150,243,0.3);
+    border: 1px solid rgba(255,255,255,0.3);
   }
   .logo-text h1 {
     font-family: 'Fraunces', serif; font-size: 22px;
-    font-weight: 600; color: #E3F2FD; letter-spacing: 0.02em;
+    font-weight: 600; color: #FFFFFF; letter-spacing: 0.02em;
   }
-  .logo-text p { font-size: 10px; color: #90CAF9; letter-spacing: 0.14em; margin-top: 2px; }
+  .logo-text p { font-size: 10px; color: #AED6F1; letter-spacing: 0.14em; margin-top: 2px; }
   .header-right { text-align: right; position: relative; }
   .live-badge {
     display: inline-flex; align-items: center; gap: 6px;
-    background: rgba(21,101,192,0.4);
-    border: 1px solid rgba(100,181,246,0.4);
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
     border-radius: 20px; padding: 5px 14px;
-    font-size: 11px; color: #90CAF9; letter-spacing: 0.1em;
-    backdrop-filter: blur(4px);
+    font-size: 11px; color: #D6EAF8; letter-spacing: 0.1em;
   }
   .live-dot {
     width: 7px; height: 7px; border-radius: 50%;
-    background: #4CAF72; animation: pulse 2s infinite;
-    box-shadow: 0 0 6px rgba(76,175,114,0.8);
+    background: #58D68D; animation: pulse 2s infinite;
   }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-  .updated { font-size: 10px; color: #5C8FAB; margin-top: 6px; letter-spacing: 0.06em; }
+  .updated { font-size: 10px; color: #AED6F1; margin-top: 6px; letter-spacing: 0.06em; }
 
   /* TALUKA TABS */
   .taluka-bar {
-    background: #0D1829;
+    background: #2E86C1;
     padding: 0 32px;
     display: flex; gap: 2px; align-items: center;
-    border-bottom: 1px solid rgba(33,150,243,0.2);
+    border-bottom: 2px solid #1A5276;
     overflow-x: auto;
   }
   .taluka-btn {
     font-family: 'DM Mono', monospace;
     font-size: 11px; letter-spacing: 0.1em;
     padding: 13px 18px; border: none; cursor: pointer;
-    background: transparent; color: #4A7FA8;
-    border-bottom: 2px solid transparent;
+    background: transparent; color: #D6EAF8;
+    border-bottom: 3px solid transparent;
     transition: all 0.2s; white-space: nowrap;
   }
-  .taluka-btn:hover { color: #90CAF9; background: rgba(33,150,243,0.06); }
-  .taluka-btn.active { color: #90CAF9; border-bottom-color: #2196F3; }
+  .taluka-btn:hover { color: #FFFFFF; background: rgba(255,255,255,0.1); }
+  .taluka-btn.active { color: #FFFFFF; border-bottom-color: #58D68D; font-weight: 500; }
   .taluka-btn.disabled-city {
-    color: #2A3F55; cursor: default; opacity: 0.5;
+    color: #7FB3D3; cursor: default; opacity: 0.5;
   }
-  .taluka-btn.disabled-city:hover { background: transparent; color: #2A3F55; }
+  .taluka-btn.disabled-city:hover { background: transparent; color: #7FB3D3; }
   .taluka-divider {
-    width: 1px; height: 20px; background: rgba(33,150,243,0.15);
+    width: 1px; height: 20px; background: rgba(255,255,255,0.2);
     margin: 0 8px; flex-shrink: 0;
   }
 
@@ -123,43 +120,43 @@
 
   /* WEATHER STRIP */
   .weather-strip {
-    background: linear-gradient(135deg, #0D1829 0%, #0F2040 50%, #0B1C38 100%);
+    background: linear-gradient(135deg, #1A5276 0%, #1F618D 50%, #2471A3 100%);
     border-radius: 14px; padding: 20px 28px;
     margin-bottom: 24px;
-    border: 1px solid rgba(33,150,243,0.2);
+    border: 1px solid rgba(255,255,255,0.15);
     position: relative; overflow: hidden;
-    box-shadow: 0 4px 24px rgba(13,31,60,0.3);
+    box-shadow: 0 4px 16px rgba(26,82,118,0.2);
   }
   .weather-strip::before {
     content: ''; position: absolute; top: -50px; right: -30px;
     width: 200px; height: 200px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(33,150,243,0.12) 0%, transparent 65%);
+    background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 65%);
     pointer-events: none;
   }
   .weather-strip::after {
     content: ''; position: absolute; bottom: -30px; left: 30%;
     width: 120px; height: 120px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(100,181,246,0.07) 0%, transparent 65%);
+    background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 65%);
     pointer-events: none;
   }
   .weather-location {
-    font-size: 10px; letter-spacing: 0.14em; color: #5C8FAB;
+    font-size: 10px; letter-spacing: 0.14em; color: #AED6F1;
     margin-bottom: 14px; text-transform: uppercase;
   }
   .weather-cards { display: flex; gap: 12px; flex-wrap: wrap; }
   .weather-card {
     flex: 1; min-width: 110px;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(100,181,246,0.15);
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
     border-radius: 10px; padding: 14px 16px;
     display: flex; flex-direction: column; gap: 5px;
     transition: border-color 0.2s;
   }
-  .weather-card:hover { border-color: rgba(100,181,246,0.35); }
-  .wcard-label { font-size: 9px; letter-spacing: 0.14em; color: #4A7FA8; text-transform: uppercase; }
-  .wcard-val { font-size: 26px; font-weight: 500; color: #E3F2FD; line-height: 1; }
-  .wcard-unit { font-size: 11px; color: #5C8FAB; }
-  .wcard-sub { font-size: 10px; color: #64B5F6; margin-top: 2px; }
+  .weather-card:hover { border-color: rgba(255,255,255,0.4); }
+  .wcard-label { font-size: 9px; letter-spacing: 0.14em; color: #AED6F1; text-transform: uppercase; }
+  .wcard-val { font-size: 26px; font-weight: 500; color: #FFFFFF; line-height: 1; }
+  .wcard-unit { font-size: 11px; color: #D6EAF8; }
+  .wcard-sub { font-size: 10px; color: #D6EAF8; margin-top: 2px; }
   .weather-icon { font-size: 28px; margin-bottom: 2px; }
 
   /* SECTION LABEL */
