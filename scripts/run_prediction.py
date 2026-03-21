@@ -15,15 +15,12 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import os
 
-# ── CONFIG ────────────────────────────────────────────────────────────────────
-
-import ee
-import os
-
+# ── GEE AUTH ─────────────────────────────────────────────────────────────────
 service_account = os.environ.get('GEE_SERVICE_ACCOUNT')
 credentials = ee.ServiceAccountCredentials(service_account, '/tmp/gee_key.json')
 ee.Initialize(credentials, project='winged-polygon-490609-q3')
 
+# ── CONFIG ────────────────────────────────────────────────────────────────────
 GEE_PROJECT = 'winged-polygon-490609-q3'
 
 TALUKAS = {
@@ -131,32 +128,29 @@ def fetch_sar_features(lat, lon, days_back=12):
     lulc   = (ee.Image('COPERNICUS/Landcover/100m/Proba-V-C3/Global/2019')
                 .select('discrete_classification').rename('LULC'))
 
-    doy_num   = acq_date.getRelative('day','year').add(1).getInfo()
-    doy       = ee.Image.constant(doy_num).rename('day_of_year')
+    doy_num    = acq_date.getRelative('day','year').add(1).getInfo()
+    doy        = ee.Image.constant(doy_num).rename('day_of_year')
     season_val = 1 if 152 <= doy_num <= 304 else (2 if doy_num >= 305 or doy_num <= 59 else 0)
-    season    = ee.Image.constant(season_val).rename('season')
+    season     = ee.Image.constant(season_val).rename('season')
 
     stack = vv_db.addBands([vh_db, ratio, rvi, angle, pass_flag,
                              ndvi, savi, lst, p30, p7,
                              slope, aspect, twi, lulc, doy, season])
 
-    sample = stack.sample(region=buffer, scale=10, numPixels=20, geometries=False)
+    # Safe extraction: pull pixel list to Python, average locally
+    sample      = stack.sample(region=buffer, scale=10, numPixels=20, geometries=False)
+    sample_list = sample.toList(20).getInfo()
 
-# Safe extraction — convert to list of dicts first, then average manually
-sample_list = sample.toList(20).getInfo()
-if not sample_list:
-    raise ValueError("GEE sample returned empty — no valid pixels in buffer")
+    if not sample_list:
+        raise ValueError("GEE sample returned empty — no valid pixels in buffer")
 
-import pandas as pd
-df = pd.DataFrame(sample_list)
-# Drop non-numeric columns (geometry etc.)
-df = df.select_dtypes(include='number')
-features = df.mean().to_dict()
+    df       = pd.DataFrame(sample_list)
+    df       = df.select_dtypes(include='number')
+    features = df.mean().to_dict()
 
-acq_date_str = ee.Date(img.get('system:time_start')).format('YYYY-MM-dd').getInfo()
+    acq_date_str = ee.Date(img.get('system:time_start')).format('YYYY-MM-dd').getInfo()
 
-return features, acq_date_str
-
+    return features, acq_date_str
 
 
 # ── RICHARDS EQUATION ─────────────────────────────────────────────────────────
@@ -183,31 +177,31 @@ class RichardsRootZone:
         return p['Ks'] * Se**p['l'] * (1-(1-Se**(1/m))**m)**2
 
     def solve(self, theta_surface, sim_days=7):
-        dz    = self.dz
-        dt    = self.dt
-        nz    = self.nz
-        FC    = self.p['theta_r'] + 0.55 * (self.p['theta_s'] - self.p['theta_r'])
-        theta = np.full(nz, FC)
-        h     = np.array([self.theta_to_h(t) for t in theta])
+        dz       = self.dz
+        dt       = self.dt
+        nz       = self.nz
+        FC       = self.p['theta_r'] + 0.55 * (self.p['theta_s'] - self.p['theta_r'])
+        theta    = np.full(nz, FC)
+        h        = np.array([self.theta_to_h(t) for t in theta])
         daily_avg = []
 
         for step in range(int(sim_days/dt)):
-            h[0]     = self.theta_to_h(theta_surface)
-            Km       = 0.5 * (self.K(h[:-1]) + self.K(h[1:]))
-            flux     = -Km * (np.diff(h) / dz - 1.0)
+            h[0]    = self.theta_to_h(theta_surface)
+            Km      = 0.5 * (self.K(h[:-1]) + self.K(h[1:]))
+            flux    = -Km * (np.diff(h) / dz - 1.0)
             theta[1:-1] += dt * (-np.diff(flux) / dz)
-            theta    = np.clip(theta, self.p['theta_r'] + 1e-4, self.p['theta_s'])
-            h        = np.array([self.theta_to_h(t) for t in theta])
+            theta   = np.clip(theta, self.p['theta_r'] + 1e-4, self.p['theta_s'])
+            h       = np.array([self.theta_to_h(t) for t in theta])
             if step % int(1.0/dt) == 0:
                 daily_avg.append(round(float(theta.mean()), 4))
 
         idx = lambda cm: int(cm / dz)
         return {
             'forecast_7day': daily_avg[:7],
-            'd10':  round(float(theta[idx(10)]), 4),
-            'd30':  round(float(theta[idx(30)]), 4),
-            'd60':  round(float(theta[idx(60)]), 4),
-            'd100': round(float(theta[idx(100)]), 4),
+            'd10':           round(float(theta[idx(10)]), 4),
+            'd30':           round(float(theta[idx(30)]), 4),
+            'd60':           round(float(theta[idx(60)]), 4),
+            'd100':          round(float(theta[idx(100)]), 4),
             'root_zone_avg': round(float(theta.mean()), 4),
         }
 
@@ -219,17 +213,10 @@ def run_predictions():
     print(f"SoilSat Prediction — {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
     print("="*50)
 
-    # Authenticate GEE
-    svc_account = os.environ.get('GEE_SERVICE_ACCOUNT')
-    key_file    = '/tmp/gee_key.json'
-    credentials = ee.ServiceAccountCredentials(svc_account, key_file)
-    ee.Initialize(credentials, project=GEE_PROJECT)
-    print("GEE authenticated")
-
     # Load model
-    model  = joblib.load('soil_moisture_model.pkl')
-    scaler = joblib.load('sm_scaler.pkl')
-    f_cols = joblib.load('feature_cols.pkl') if Path('feature_cols.pkl').exists() else FEATURE_COLS
+    model    = joblib.load('soil_moisture_model.pkl')
+    scaler   = joblib.load('sm_scaler.pkl')
+    f_cols   = joblib.load('feature_cols.pkl') if Path('feature_cols.pkl').exists() else FEATURE_COLS
 
     richards = RichardsRootZone()
     results  = {}
@@ -239,9 +226,12 @@ def run_predictions():
         try:
             features, acq_date = fetch_sar_features(info['lat'], info['lon'])
             print(f"  SAR date: {acq_date}")
+            print(f"  Features fetched: {len(features)}")
 
             row = {col: features.get(col, 0) for col in f_cols}
-            if row.get('NDVI', -9999) == -9999:
+
+            # Fallback for missing optical data
+            if row.get('NDVI', -9999) <= -9999 or row.get('NDVI', -9999) == 0:
                 row['NDVI'] = 0.312
                 row['SAVI'] = 0.468
 
@@ -251,7 +241,7 @@ def run_predictions():
             print(f"  Topsoil SM: {sm:.4f}")
 
             rz = richards.solve(sm)
-            print(f"  Root zone: {rz['root_zone_avg']:.4f}")
+            print(f"  Root zone avg: {rz['root_zone_avg']:.4f}")
 
             results[key] = {
                 'name':          info['name'],
@@ -270,7 +260,7 @@ def run_predictions():
             }
 
         except Exception as e:
-            print(f"  ERROR: {e}")
+            print(f"  ERROR for {info['name']}: {e}")
             results[key] = {'name': info['name'], 'error': str(e)}
 
     output = {
