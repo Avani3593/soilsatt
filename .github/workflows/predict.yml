@@ -49,8 +49,9 @@ jobs:
         python scripts/run_prediction.py
 
     - name: Commit prediction results
-      run: |
-        git config --global user.email "soilsat-bot@mmcoe.edu.in"
-        git config --global user.name "SoilSat Bot"
-        git add data/predictions.json data/last_run.json
-        git diff --staged --quiet || git commit -m "Auto: prediction update $(date -u '+%Y-%m-%d %H:%M UTC')"
+  run: |
+    git config --global user.email "soilsat-bot@mmcoe.edu.in"
+    git config --global user.name "SoilSat Bot"
+    git add data/predictions.json data/last_run.json
+    git diff --staged --quiet || git commit -m "Auto: prediction update $(date -u '+%Y-%m-%d %H:%M UTC')"
+    git push
