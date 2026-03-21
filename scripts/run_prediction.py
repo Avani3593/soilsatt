@@ -140,9 +140,22 @@ def fetch_sar_features(lat, lon, days_back=12):
                              ndvi, savi, lst, p30, p7,
                              slope, aspect, twi, lulc, doy, season])
 
-    sample   = stack.sample(region=buffer, scale=10, numPixels=20, geometries=False)
-    features = sample.aggregate_mean(stack.bandNames()).getInfo()
-    acq_date_str = ee.Date(img.get('system:time_start')).format('YYYY-MM-dd').getInfo()
+    sample = stack.sample(region=buffer, scale=10, numPixels=20, geometries=False)
+
+# Safe extraction — convert to list of dicts first, then average manually
+sample_list = sample.toList(20).getInfo()
+if not sample_list:
+    raise ValueError("GEE sample returned empty — no valid pixels in buffer")
+
+import pandas as pd
+df = pd.DataFrame(sample_list)
+# Drop non-numeric columns (geometry etc.)
+df = df.select_dtypes(include='number')
+features = df.mean().to_dict()
+
+acq_date_str = ee.Date(img.get('system:time_start')).format('YYYY-MM-dd').getInfo()
+
+return features, acq_date_str
 
     return features, acq_date_str
 
