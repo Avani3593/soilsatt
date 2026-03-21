@@ -494,30 +494,69 @@ async function fetchPredictions() {
 }
 
 function makeDemoData() {
-  const base  = ['2026-03-21','2026-03-22','2026-03-23','2026-03-24','2026-03-25','2026-03-26','2026-03-27'];
-  const talukas = ['Baramati','Indapur','Haveli','Junnar','Shirur'];
-  const out   = { timestamp: new Date().toISOString(), talukas: {} };
-  talukas.forEach(t => {
-    out.talukas[t] = {
-      surface_sm:  base.map((_,i) => +(0.148 + i*0.001 + (Math.random()-0.5)*0.003).toFixed(3)),
-      rootzone_sm: base.map((_,i) => +(0.312 + i*0.0005 + (Math.random()-0.5)*0.002).toFixed(3)),
-      dates: base
+  // Matches exact structure output by run_prediction.py
+  const talukaKeys = ['baramati','indapur','haveli','junnar','shirur'];
+  const talukaNames = ['Baramati','Indapur','Haveli','Junnar','Shirur'];
+  const out = { generated_at: new Date().toISOString(), talukas: {} };
+  talukaKeys.forEach((k, i) => {
+    const sm = 0.145 + Math.random()*0.01;
+    const rz = 0.308 + Math.random()*0.008;
+    out.talukas[k] = {
+      name: talukaNames[i],
+      topsoil_sm: +sm.toFixed(4),
+      root_zone_avg: +rz.toFixed(4),
+      forecast_7day: Array.from({length:7}, (_,d) => +(rz + d*0.0002 + (Math.random()-0.5)*0.001).toFixed(4)),
+      depth: { d10: +(rz-0.02).toFixed(4), d30: +(rz+0.01).toFixed(4), d60: +(rz+0.02).toFixed(4), d100: +(rz+0.015).toFixed(4) },
+      acq_date: new Date().toISOString().slice(0,10)
     };
   });
   return out;
 }
 
+// Map taluka display name → lowercase key used by run_prediction.py
+function getTalukaKey(name) {
+  return name.toLowerCase();
+}
+
+// Build 7-day date array starting from acquisition date
+function buildDates(acqDate) {
+  const base = acqDate ? new Date(acqDate) : new Date();
+  return Array.from({length:7}, (_,i) => {
+    const d = new Date(base);
+    d.setDate(d.getDate() + i);
+    return d.toISOString().slice(0,10);
+  });
+}
+
 function renderPredictions() {
   if (!predData) return;
-  const t    = predData.talukas?.[currentTaluka];
-  if (!t) return;
 
-  const surface  = t.surface_sm  || t.surface  || [];
-  const rootzone = t.rootzone_sm || t.rootzone  || [];
-  const dates    = t.dates || t.forecast_dates  || [];
+  // run_prediction.py uses lowercase keys (baramati, not Baramati)
+  const key = getTalukaKey(currentTaluka);
+  const t   = predData.talukas?.[key] || predData.talukas?.[currentTaluka];
+  if (!t || t.error) {
+    document.getElementById('surface-now').textContent  = '—';
+    document.getElementById('rootzone-now').textContent = '—';
+    document.getElementById('status-msg').textContent   = t?.error ? `Error for ${currentTaluka}: ${t.error}` : 'No data for this taluka.';
+    return;
+  }
 
-  const surfNow  = surface[0]  || 0;
-  const rootNow  = rootzone[0] || 0;
+  // Surface SM: topsoil_sm is a single float from XGBoost prediction
+  // We repeat it as today's value and show forecast_7day as root zone 7-day
+  const surfNow  = t.topsoil_sm   || 0;
+  const rootNow  = t.root_zone_avg || t.forecast_7day?.[0] || 0;
+
+  // Surface: flat array of topsoil_sm for 7 days (model gives one value; we hold steady)
+  // This is physically correct — SAR gives one snapshot, not a forecast
+  const surfaceArr  = Array.from({length:7}, () => surfNow);
+
+  // Root zone: actual 7-day Richards equation forecast
+  const rootzoneArr = t.forecast_7day || Array(7).fill(rootNow);
+
+  const dates = buildDates(t.acq_date);
+
+  document.getElementById('surface-now').textContent  = surfNow.toFixed(3);
+  document.getElementById('rootzone-now').textContent = rootNow.toFixed(3);
 
   // Big numbers
   document.getElementById('surface-now').textContent  = surfNow.toFixed(3);
@@ -549,7 +588,7 @@ function renderPredictions() {
       labels,
       datasets: [{
         label: 'Surface SM (0–10cm)',
-        data: surface,
+        data: surfaceArr,
         borderColor: '#C4622D',
         backgroundColor: 'rgba(196,98,45,0.12)',
         pointBackgroundColor: '#C4622D',
@@ -567,7 +606,7 @@ function renderPredictions() {
       labels,
       datasets: [{
         label: 'Root-Zone SM (0–100cm)',
-        data: rootzone,
+        data: rootzoneArr,
         borderColor: '#2D7D46',
         backgroundColor: 'rgba(45,125,70,0.12)',
         pointBackgroundColor: '#2D7D46',
@@ -577,8 +616,9 @@ function renderPredictions() {
     options: chartOpts('m³/m³', '#2D7D46', 0.20, 0.40)
   });
 
-  // Advisory
+  // Advisory uses root zone today value
   renderAdvisory(rootNow);
+  document.getElementById('status-msg').textContent = t.acq_date ? `SAR acquisition date: ${t.acq_date}` : '';
 }
 
 function chartOpts(unit, color, ymin, ymax) {
