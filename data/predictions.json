@@ -1,82 +1,27 @@
 {
-  "generated_at": "2025-01-01T00:00:00Z",
+  "generated_at": "2026-03-21T13:11:21.513031Z",
   "model": "XGBoost + Richards Equation",
   "ubRMSE": 0.0139,
   "talukas": {
     "baramati": {
       "name": "Baramati",
-      "lat": 18.15,
-      "lon": 74.58,
-      "acq_date": "2025-01-01",
-      "topsoil_sm": 0.31,
-      "root_zone_avg": 0.29,
-      "depth": {
-        "d10": 0.34,
-        "d30": 0.31,
-        "d60": 0.28,
-        "d100": 0.25
-      },
-      "forecast_7day": [0.31, 0.29, 0.27, 0.24, 0.22, 0.21, 0.20]
+      "error": "String: Unable to convert object to string."
     },
     "indapur": {
       "name": "Indapur",
-      "lat": 17.97,
-      "lon": 75.01,
-      "acq_date": "2025-01-01",
-      "topsoil_sm": 0.20,
-      "root_zone_avg": 0.19,
-      "depth": {
-        "d10": 0.22,
-        "d30": 0.20,
-        "d60": 0.18,
-        "d100": 0.17
-      },
-      "forecast_7day": [0.20, 0.19, 0.18, 0.17, 0.16, 0.15, 0.14]
+      "error": "String: Unable to convert object to string."
     },
     "haveli": {
       "name": "Haveli",
-      "lat": 18.52,
-      "lon": 73.92,
-      "acq_date": "2025-01-01",
-      "topsoil_sm": 0.38,
-      "root_zone_avg": 0.36,
-      "depth": {
-        "d10": 0.40,
-        "d30": 0.38,
-        "d60": 0.35,
-        "d100": 0.32
-      },
-      "forecast_7day": [0.38, 0.37, 0.36, 0.35, 0.34, 0.33, 0.32]
+      "error": "String: Unable to convert object to string."
     },
     "junnar": {
       "name": "Junnar",
-      "lat": 19.20,
-      "lon": 73.88,
-      "acq_date": "2025-01-01",
-      "topsoil_sm": 0.16,
-      "root_zone_avg": 0.15,
-      "depth": {
-        "d10": 0.18,
-        "d30": 0.16,
-        "d60": 0.14,
-        "d100": 0.13
-      },
-      "forecast_7day": [0.16, 0.15, 0.14, 0.14, 0.13, 0.13, 0.12]
+      "error": "String: Unable to convert object to string."
     },
     "shirur": {
       "name": "Shirur",
-      "lat": 18.83,
-      "lon": 74.38,
-      "acq_date": "2025-01-01",
-      "topsoil_sm": 0.24,
-      "root_zone_avg": 0.22,
-      "depth": {
-        "d10": 0.25,
-        "d30": 0.24,
-        "d60": 0.23,
-        "d100": 0.22
-      },
-      "forecast_7day": [0.24, 0.23, 0.22, 0.21, 0.20, 0.19, 0.18]
+      "error": "String: Unable to convert object to string."
     }
   }
 }
