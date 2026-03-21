@@ -10,48 +10,38 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    permissions:
+      contents: write
+
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install earthengine-api xgboost scikit-learn \
+                      pandas numpy scipy joblib requests \
+                      google-auth google-auth-oauthlib
 
-    - name: Install dependencies
-      run: |
-        pip install earthengine-api xgboost scikit-learn \
-                    pandas numpy scipy joblib requests \
-                    google-auth google-auth-oauthlib
+      - name: Write GEE key file
+        run: |
+          echo '${{ secrets.GEE_SERVICE_ACCOUNT_KEY }}' > /tmp/gee_key.json
 
-    - name: Write GEE key file
-      run: |
-        echo '${{ secrets.GEE_SERVICE_ACCOUNT_KEY }}' > /tmp/gee_key.json
+      - name: Run SoilSat prediction
+        env:
+          GEE_SERVICE_ACCOUNT: ${{ secrets.GEE_SERVICE_ACCOUNT }}
+        run: |
+          python scripts/run_prediction.py
 
-    - name: Authenticate GEE
-      run: |
-        python - << 'EOF'
-        import ee
-        service_account = '${{ secrets.GEE_SERVICE_ACCOUNT }}'
-        credentials = ee.ServiceAccountCredentials(
-            service_account, '/tmp/gee_key.json'
-        )
-        ee.Initialize(credentials, project='winged-polygon-490609-q3')
-        print("GEE authenticated successfully")
-        EOF
-
-    - name: Run SoilSat prediction
-      env:
-        GEE_SERVICE_ACCOUNT: ${{ secrets.GEE_SERVICE_ACCOUNT }}
-      run: |
-        python scripts/run_prediction.py
-
-    - name: Commit prediction results
-  run: |
-    git config --global user.email "soilsat-bot@mmcoe.edu.in"
-    git config --global user.name "SoilSat Bot"
-    git add data/predictions.json data/last_run.json
-    git diff --staged --quiet || git commit -m "Auto: prediction update $(date -u '+%Y-%m-%d %H:%M UTC')"
-    git push
+      - name: Commit prediction results
+        run: |
+          git config --global user.email "soilsat-bot@mmcoe.edu.in"
+          git config --global user.name "SoilSat Bot"
+          git add data/predictions.json data/last_run.json
+          git diff --staged --quiet || git commit -m "Auto: prediction update $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push
