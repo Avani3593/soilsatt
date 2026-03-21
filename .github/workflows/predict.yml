@@ -2,11 +2,7 @@ name: SoilSat Daily Prediction
 
 on:
   schedule:
-    # Runs every 6 days at 06:00 UTC (11:30 IST)
-    # Sentinel-1 repeat cycle is 6 days over Pune
     - cron: '0 6 */6 * *'
-
-  # Also allow manual trigger from GitHub UI
   workflow_dispatch:
 
 jobs:
@@ -16,57 +12,45 @@ jobs:
 
     steps:
 
-    # 1. Check out your repo (contains model .pkl files)
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # 2. Set up Python
     - name: Set up Python 3.11
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-        
 
-    # 3. Install dependencies
     - name: Install dependencies
       run: |
         pip install earthengine-api xgboost scikit-learn \
                     pandas numpy scipy joblib requests \
                     google-auth google-auth-oauthlib
 
-    # 4. Authenticate with GEE using service account
-    #    (store your GEE service account JSON in GitHub Secrets)
-    - name: Authenticate GEE
-      env:
-        GEE_SERVICE_ACCOUNT: ${{ secrets.GEE_SERVICE_ACCOUNT }}
-        GEE_SERVICE_ACCOUNT_KEY: ${{ secrets.GEE_SERVICE_ACCOUNT_KEY }}
+    - name: Write GEE key file
       run: |
         echo '${{ secrets.GEE_SERVICE_ACCOUNT_KEY }}' > /tmp/gee_key.json
+
+    - name: Authenticate GEE
+      run: |
         python - << 'EOF'
-        import ee, json
+        import ee
         service_account = '${{ secrets.GEE_SERVICE_ACCOUNT }}'
         credentials = ee.ServiceAccountCredentials(
             service_account, '/tmp/gee_key.json'
         )
-        ee.Initialize(credentials)
+        ee.Initialize(credentials, project='winged-polygon-490609-q3')
         print("GEE authenticated successfully")
         EOF
 
-    # 5. Run the prediction script
     - name: Run SoilSat prediction
       env:
         GEE_SERVICE_ACCOUNT: ${{ secrets.GEE_SERVICE_ACCOUNT }}
-        FIREBASE_URL: ${{ secrets.FIREBASE_URL }}
-        FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
       run: |
         python scripts/run_prediction.py
 
-    # 6. Commit updated predictions JSON back to repo
-    #    (the dashboard reads this file directly)
     - name: Commit prediction results
       run: |
         git config --global user.email "soilsat-bot@mmcoe.edu.in"
         git config --global user.name "SoilSat Bot"
         git add data/predictions.json data/last_run.json
         git diff --staged --quiet || git commit -m "Auto: prediction update $(date -u '+%Y-%m-%d %H:%M UTC')"
-        git push
