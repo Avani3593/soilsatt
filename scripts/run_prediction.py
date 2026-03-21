@@ -157,7 +157,6 @@ acq_date_str = ee.Date(img.get('system:time_start')).format('YYYY-MM-dd').getInf
 
 return features, acq_date_str
 
-    return features, acq_date_str
 
 
 # ── RICHARDS EQUATION ─────────────────────────────────────────────────────────
