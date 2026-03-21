@@ -17,6 +17,13 @@ import os
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 
+import ee
+import os
+
+service_account = os.environ.get('GEE_SERVICE_ACCOUNT')
+credentials = ee.ServiceAccountCredentials(service_account, '/tmp/gee_key.json')
+ee.Initialize(credentials, project='winged-polygon-490609-q3')
+
 GEE_PROJECT = 'winged-polygon-490609-q3'
 
 TALUKAS = {
