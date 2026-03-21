@@ -17,7 +17,7 @@ import os
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 
-GEE_PROJECT = 'neural-cable-485621-m2'
+GEE_PROJECT = 'winged-polygon-490609-q3'
 
 TALUKAS = {
     'baramati': {'lat': 18.15, 'lon': 74.58, 'name': 'Baramati'},
@@ -27,7 +27,6 @@ TALUKAS = {
     'shirur':   {'lat': 18.83, 'lon': 74.38, 'name': 'Shirur'},
 }
 
-# Pune Vertisol Van Genuchten parameters
 VG_PARAMS = {
     'theta_r': 0.089, 'theta_s': 0.500,
     'alpha':   0.010, 'n':       1.230,
@@ -46,16 +45,14 @@ FEATURE_COLS = [
 # ── GEE DATA FETCHER ──────────────────────────────────────────────────────────
 
 def fetch_sar_features(lat, lon, days_back=12):
-    """Fetch latest Sentinel-1 features for a point location."""
-    point = ee.Geometry.Point([lon, lat])
-    buffer = point.buffer(500)  # 500m buffer around farm point
+    point  = ee.Geometry.Point([lon, lat])
+    buffer = point.buffer(500)
 
     end_date   = datetime.utcnow()
     start_date = end_date - timedelta(days=days_back)
     start_str  = start_date.strftime('%Y-%m-%d')
     end_str    = end_date.strftime('%Y-%m-%d')
 
-    # Sentinel-1 SAR
     s1 = (ee.ImageCollection('COPERNICUS/S1_GRD')
           .filterBounds(buffer)
           .filterDate(start_str, end_str)
@@ -67,96 +64,77 @@ def fetch_sar_features(lat, lon, days_back=12):
         print(f"  No S1 images found, extending to {days_back*2} days")
         return fetch_sar_features(lat, lon, days_back * 2)
 
-    img = s1.sort('system:time_start', False).first()
-
-    vv_raw = img.select('VV')
-    vh_raw = img.select('VH')
-    vv_db  = vv_raw.rename('VV_filtered_dB')
-    vh_db  = vh_raw.rename('VH_filtered_dB')
-
-    # Power domain for ratio and RVI
+    img    = s1.sort('system:time_start', False).first()
+    vv_db  = img.select('VV').rename('VV_filtered_dB')
+    vh_db  = img.select('VH').rename('VH_filtered_dB')
     vv_pow = ee.Image(10).pow(vv_db.divide(10))
     vh_pow = ee.Image(10).pow(vh_db.divide(10))
     ratio  = vv_pow.divide(vh_pow).log10().multiply(10).rename('VV_VH_ratio')
     rvi    = vh_pow.multiply(4).divide(vv_pow.add(vh_pow)).rename('RVI')
+    angle  = img.select('angle').rename('incidence_angle')
 
-    angle = img.select('angle').rename('incidence_angle')
-
-    pass_val = ee.Algorithms.If(
+    pass_val  = ee.Algorithms.If(
         ee.String(img.get('orbitProperties_pass')).equals('ASCENDING'),
         ee.Image.constant(1), ee.Image.constant(0)
     )
     pass_flag = ee.Image(pass_val).rename('pass_flag')
+    acq_date  = ee.Date(img.get('system:time_start'))
 
-    acq_date = ee.Date(img.get('system:time_start'))
-
-    # Sentinel-2 NDVI
     s2 = (ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
           .filterBounds(buffer)
           .filterDate(acq_date.advance(-15,'day'), acq_date.advance(15,'day'))
           .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 30))
           .sort('CLOUDY_PIXEL_PERCENTAGE'))
 
-    ndvi_img = ee.Algorithms.If(
+    ndvi = ee.Image(ee.Algorithms.If(
         s2.size().gt(0),
         s2.first().normalizedDifference(['B8','B4']).rename('NDVI'),
         ee.Image.constant(-9999).rename('NDVI')
-    )
-    ndvi = ee.Image(ndvi_img)
+    ))
     savi = ee.Image(ee.Algorithms.If(
         s2.size().gt(0),
         s2.first().expression(
             '1.5*(NIR-RED)/(NIR+RED+0.5)',
-            {'NIR':s2.first().select('B8'),'RED':s2.first().select('B4')}
+            {'NIR': s2.first().select('B8'), 'RED': s2.first().select('B4')}
         ).rename('SAVI'),
         ee.Image.constant(-9999).rename('SAVI')
     ))
 
-    # MODIS LST
     modis = (ee.ImageCollection('MODIS/061/MOD11A1')
              .filterBounds(buffer)
              .filterDate(acq_date.advance(-8,'day'), acq_date.advance(1,'day'))
-             .select('LST_Day_1km')
-             .mean())
+             .select('LST_Day_1km').mean())
     lst = modis.multiply(0.02).subtract(273.15).rename('LST_C')
 
-    # ERA5 precipitation
     era5 = ee.ImageCollection('ECMWF/ERA5_LAND/DAILY_AGGR').filterBounds(buffer)
-    p30 = (era5.filterDate(acq_date.advance(-30,'day'), acq_date)
+    p30  = (era5.filterDate(acq_date.advance(-30,'day'), acq_date)
                .select('total_precipitation_sum')
                .sum().multiply(1000).rename('precip_30d_mm'))
-    p7  = (era5.filterDate(acq_date.advance(-7,'day'), acq_date)
+    p7   = (era5.filterDate(acq_date.advance(-7,'day'), acq_date)
                .select('total_precipitation_sum')
                .sum().multiply(1000).rename('precip_7d_mm'))
 
-    # Terrain (static)
-    dem   = ee.Image('USGS/SRTMGL1_003')
-    slope = ee.Terrain.slope(dem).rename('slope')
-    aspect= ee.Terrain.aspect(dem).rename('aspect')
-    area  = ee.Image('WWF/HydroSHEDS/15ACC').rename('flow_acc')
-    twi   = (area.add(1).log()
-               .subtract(slope.multiply(np.pi/180).tan().add(0.001).log())
-               .rename('TWI'))
-    lulc  = (ee.Image('COPERNICUS/Landcover/100m/Proba-V-C3/Global/2019')
-               .select('discrete_classification').rename('LULC'))
+    dem    = ee.Image('USGS/SRTMGL1_003')
+    slope  = ee.Terrain.slope(dem).rename('slope')
+    aspect = ee.Terrain.aspect(dem).rename('aspect')
+    area   = ee.Image('WWF/HydroSHEDS/15ACC').rename('flow_acc')
+    twi    = (area.add(1).log()
+                .subtract(slope.multiply(np.pi/180).tan().add(0.001).log())
+                .rename('TWI'))
+    lulc   = (ee.Image('COPERNICUS/Landcover/100m/Proba-V-C3/Global/2019')
+                .select('discrete_classification').rename('LULC'))
 
-    # Day of year and season
-    doy = ee.Image.constant(acq_date.getRelative('day','year').add(1)).rename('day_of_year')
-    doy_num = acq_date.getRelative('day','year').add(1).getInfo()
+    doy_num   = acq_date.getRelative('day','year').add(1).getInfo()
+    doy       = ee.Image.constant(doy_num).rename('day_of_year')
     season_val = 1 if 152 <= doy_num <= 304 else (2 if doy_num >= 305 or doy_num <= 59 else 0)
-    season_img = ee.Image.constant(season_val).rename('season')
+    season    = ee.Image.constant(season_val).rename('season')
 
-    # Stack all features
-    stack = (vv_db.addBands([vh_db, ratio, rvi, angle, pass_flag,
-                              ndvi, savi, lst, p30, p7,
-                              slope, aspect, twi, lulc,
-                              doy, season_img]))
+    stack = vv_db.addBands([vh_db, ratio, rvi, angle, pass_flag,
+                             ndvi, savi, lst, p30, p7,
+                             slope, aspect, twi, lulc, doy, season])
 
-    # Sample at point
-    sample = stack.sample(region=buffer, scale=10, numPixels=20, geometries=False)
+    sample   = stack.sample(region=buffer, scale=10, numPixels=20, geometries=False)
     features = sample.aggregate_mean(stack.bandNames()).getInfo()
-
-    # Get acquisition date
     acq_date_str = ee.Date(img.get('system:time_start')).format('YYYY-MM-dd').getInfo()
 
     return features, acq_date_str
@@ -186,25 +164,24 @@ class RichardsRootZone:
         return p['Ks'] * Se**p['l'] * (1-(1-Se**(1/m))**m)**2
 
     def solve(self, theta_surface, sim_days=7):
-        dz = self.dz
-        dt = self.dt
-        nz = self.nz
-        FC = self.p['theta_r'] + 0.55 * (self.p['theta_s'] - self.p['theta_r'])
+        dz    = self.dz
+        dt    = self.dt
+        nz    = self.nz
+        FC    = self.p['theta_r'] + 0.55 * (self.p['theta_s'] - self.p['theta_r'])
         theta = np.full(nz, FC)
-        h = np.array([self.theta_to_h(t) for t in theta])
+        h     = np.array([self.theta_to_h(t) for t in theta])
         daily_avg = []
 
         for step in range(int(sim_days/dt)):
-            h[0] = self.theta_to_h(theta_surface)
-            Km   = 0.5 * (self.K(h[:-1]) + self.K(h[1:]))
-            flux = -Km * (np.diff(h) / dz - 1.0)
+            h[0]     = self.theta_to_h(theta_surface)
+            Km       = 0.5 * (self.K(h[:-1]) + self.K(h[1:]))
+            flux     = -Km * (np.diff(h) / dz - 1.0)
             theta[1:-1] += dt * (-np.diff(flux) / dz)
-            theta = np.clip(theta, self.p['theta_r'] + 1e-4, self.p['theta_s'])
-            h = np.array([self.theta_to_h(t) for t in theta])
+            theta    = np.clip(theta, self.p['theta_r'] + 1e-4, self.p['theta_s'])
+            h        = np.array([self.theta_to_h(t) for t in theta])
             if step % int(1.0/dt) == 0:
                 daily_avg.append(round(float(theta.mean()), 4))
 
-        # depth-specific values for dashboard
         idx = lambda cm: int(cm / dz)
         return {
             'forecast_7day': daily_avg[:7],
@@ -216,87 +193,67 @@ class RichardsRootZone:
         }
 
 
-# ── MAIN PREDICTION LOOP ──────────────────────────────────────────────────────
+# ── MAIN ──────────────────────────────────────────────────────────────────────
 
 def run_predictions():
     print("="*50)
-    print(f"SoilSat Prediction Run — {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+    print(f"SoilSat Prediction — {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
     print("="*50)
 
-    # Authenticate GEE with service account
+    # Authenticate GEE
     svc_account = os.environ.get('GEE_SERVICE_ACCOUNT')
-    key_file = '/tmp/gee_key.json'
+    key_file    = '/tmp/gee_key.json'
     credentials = ee.ServiceAccountCredentials(svc_account, key_file)
     ee.Initialize(credentials, project=GEE_PROJECT)
+    print("GEE authenticated")
 
-    # Load trained model
-    model_path  = Path('models/soil_moisture_model.pkl')
-    scaler_path = Path('models/sm_scaler.pkl')
-    fcols_path  = Path('models/feature_cols.pkl')
-
-    model   = joblib.load(model_path)
-    scaler  = joblib.load(scaler_path)
-    f_cols  = joblib.load(fcols_path) if fcols_path.exists() else FEATURE_COLS
+    # Load model
+    model  = joblib.load('soil_moisture_model.pkl')
+    scaler = joblib.load('sm_scaler.pkl')
+    f_cols = joblib.load('feature_cols.pkl') if Path('feature_cols.pkl').exists() else FEATURE_COLS
 
     richards = RichardsRootZone()
-
-    results = {}
+    results  = {}
 
     for key, info in TALUKAS.items():
-        print(f"\nProcessing {info['name']} ({info['lat']}, {info['lon']})...")
-
+        print(f"\nProcessing {info['name']}...")
         try:
-            # Fetch GEE features
             features, acq_date = fetch_sar_features(info['lat'], info['lon'])
-            print(f"  SAR acquisition date: {acq_date}")
+            print(f"  SAR date: {acq_date}")
 
-            # Build feature vector
             row = {col: features.get(col, 0) for col in f_cols}
-
-            # Handle NDVI/SAVI fill if missing
             if row.get('NDVI', -9999) == -9999:
                 row['NDVI'] = 0.312
                 row['SAVI'] = 0.468
 
-            df = pd.DataFrame([row])[f_cols]
-            X  = scaler.transform(df)
+            df  = pd.DataFrame([row])[f_cols]
+            X   = scaler.transform(df)
+            sm  = float(np.clip(model.predict(X)[0], 0.02, 0.55))
+            print(f"  Topsoil SM: {sm:.4f}")
 
-            # XGBoost prediction (topsoil SM)
-            topsoil_sm = float(model.predict(X)[0])
-            topsoil_sm = np.clip(topsoil_sm, 0.02, 0.55)
-            print(f"  Topsoil SM predicted: {topsoil_sm:.4f} m3/m3")
-
-            # Richards equation root zone extension
-            rz = richards.solve(topsoil_sm, sim_days=7)
-            print(f"  Root zone avg: {rz['root_zone_avg']:.4f} m3/m3")
+            rz = richards.solve(sm)
+            print(f"  Root zone: {rz['root_zone_avg']:.4f}")
 
             results[key] = {
-                'name':           info['name'],
-                'lat':            info['lat'],
-                'lon':            info['lon'],
-                'acq_date':       acq_date,
-                'topsoil_sm':     round(topsoil_sm, 4),
-                'root_zone_avg':  rz['root_zone_avg'],
+                'name':          info['name'],
+                'lat':           info['lat'],
+                'lon':           info['lon'],
+                'acq_date':      acq_date,
+                'topsoil_sm':    round(sm, 4),
+                'root_zone_avg': rz['root_zone_avg'],
                 'depth': {
                     'd10':  rz['d10'],
                     'd30':  rz['d30'],
                     'd60':  rz['d60'],
                     'd100': rz['d100'],
                 },
-                'forecast_7day':  rz['forecast_7day'],
-                'sar_features': {
-                    'VV_dB': round(row.get('VV_filtered_dB', 0), 3),
-                    'VH_dB': round(row.get('VH_filtered_dB', 0), 3),
-                    'NDVI':  round(row.get('NDVI', 0), 3),
-                    'precip_7d': round(row.get('precip_7d_mm', 0), 1),
-                }
+                'forecast_7day': rz['forecast_7day'],
             }
 
         except Exception as e:
-            print(f"  ERROR for {info['name']}: {e}")
+            print(f"  ERROR: {e}")
             results[key] = {'name': info['name'], 'error': str(e)}
 
-    # Save results
     output = {
         'generated_at': datetime.utcnow().isoformat() + 'Z',
         'model':        'XGBoost + Richards Equation',
@@ -308,13 +265,12 @@ def run_predictions():
     with open('data/predictions.json', 'w') as f:
         json.dump(output, f, indent=2)
 
-    # Also save last run timestamp
     with open('data/last_run.json', 'w') as f:
         json.dump({'last_run': output['generated_at'], 'status': 'success'}, f)
 
-    print(f"\nPredictions saved to data/predictions.json")
-    print(f"Talukas processed: {len([v for v in results.values() if 'error' not in v])}/{len(TALUKAS)}")
-    print("Done.")
+    print(f"\nDone. Saved data/predictions.json")
+    ok = len([v for v in results.values() if 'error' not in v])
+    print(f"Talukas succeeded: {ok}/{len(TALUKAS)}")
 
 
 if __name__ == '__main__':
