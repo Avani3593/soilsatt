@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-25T07:41:32.004246Z",
+  "generated_at": "2026-05-01T08:23:05.371164Z",
   "model": "XGBoost + Richards Equation",
   "ubRMSE": 0.0139,
   "talukas": {
@@ -7,7 +7,7 @@
       "name": "Baramati",
       "lat": 18.15,
       "lon": 74.58,
-      "acq_date": "2026-04-15",
+      "acq_date": "2026-04-27",
       "topsoil_sm": 0.0411,
       "root_zone_avg": 0.2994,
       "depth": {
@@ -30,7 +30,7 @@
       "name": "Indapur",
       "lat": 17.97,
       "lon": 75.01,
-      "acq_date": "2026-04-15",
+      "acq_date": "2026-04-27",
       "topsoil_sm": 0.0411,
       "root_zone_avg": 0.2994,
       "depth": {
@@ -53,7 +53,7 @@
       "name": "Haveli",
       "lat": 18.52,
       "lon": 73.92,
-      "acq_date": "2026-04-15",
+      "acq_date": "2026-04-27",
       "topsoil_sm": 0.0411,
       "root_zone_avg": 0.2994,
       "depth": {
@@ -76,7 +76,7 @@
       "name": "Junnar",
       "lat": 19.2,
       "lon": 73.88,
-      "acq_date": "2026-04-15",
+      "acq_date": "2026-04-27",
       "topsoil_sm": 0.0411,
       "root_zone_avg": 0.2994,
       "depth": {
@@ -99,7 +99,7 @@
       "name": "Shirur",
       "lat": 18.83,
       "lon": 74.38,
-      "acq_date": "2026-04-15",
+      "acq_date": "2026-04-27",
       "topsoil_sm": 0.0411,
       "root_zone_avg": 0.2994,
       "depth": {
