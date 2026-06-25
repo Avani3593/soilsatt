@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-19T10:52:40.842145Z",
+  "generated_at": "2026-06-25T09:37:40.241808Z",
   "model": "XGBoost + Richards Equation",
   "ubRMSE": 0.0139,
   "talukas": {
